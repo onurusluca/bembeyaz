@@ -1,0 +1,16 @@
+{
+  "name": "bembeyaz",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm --prefix packages/core run build",
+    "dev": "vite packages/core --host --open /demo/dev.html",
+    "dev:core": "npm --prefix packages/core run dev",
+    "demo": "npm --prefix packages/core run build && npx --yes serve packages/core -p 4173"
+  },
+  "devDependencies": {
+    "vite": "^8.0.3"
+  }
+}
