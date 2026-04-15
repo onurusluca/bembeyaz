@@ -40,6 +40,7 @@ import { ToolManager } from './tools/ToolManager.js'
 import type { ToolContext } from './tools/ToolContext.js'
 import { RenderLoop } from './renderer/RenderLoop.js'
 import { TextEditOverlay } from './ui/TextEditOverlay.js'
+import { exportSceneToSvgString } from './export/svgExport.js'
 
 const DEFAULT_BG = '#ffffff'
 
@@ -222,6 +223,10 @@ export class Bembeyaz {
         const segs = this.toolManager.laser.getSegments()
         return segs.length > 0 ? segs : null
       },
+      getEraserSegments: () => {
+        const segs = this.toolManager.eraser.getSegments()
+        return segs.length > 0 ? segs : null
+      },
       getPresenceRender: () => ({
         localUserId: this.presence.getLocalUserId(),
         peers: [...this.presence.getSnapshot().values()],
@@ -247,8 +252,8 @@ export class Bembeyaz {
       getScene: () => this.scene,
       getTextPlacementStyle: () => ({
         color: this.penOptions.color,
-        strokeColor: this.penOptions.textStrokeColor,
-        strokeWidth: this.penOptions.textStrokeWidth,
+        strokeColor: 'transparent',
+        strokeWidth: 0,
         fontFamily: this.penOptions.textFontFamily,
         fontSize: this.penOptions.textFontSize,
         textAlign: this.penOptions.textAlign,
@@ -426,6 +431,7 @@ export class Bembeyaz {
     naturalHeight: number,
     offsetWorld = 0,
     appendToSelection = false,
+    atWorld: { x: number; y: number } | null = null,
   ): string | undefined {
     if (this.destroyed) return undefined
     if (naturalWidth <= 0 || naturalHeight <= 0) return undefined
@@ -435,11 +441,20 @@ export class Bembeyaz {
     const h = naturalHeight * scale
     const size = this.canvas.getSize()
     const vb = this.viewport.getVisibleWorldBounds(size.width, size.height)
-    const cx = (vb.minX + vb.maxX) / 2 + offsetWorld
-    const cy = (vb.minY + vb.maxY) / 2 + offsetWorld
+    let cx: number
+    let cy: number
+    if (atWorld) {
+      cx = atWorld.x
+      cy = atWorld.y
+    } else {
+      cx = (vb.minX + vb.maxX) / 2 + offsetWorld
+      cy = (vb.minY + vb.maxY) / 2 + offsetWorld
+    }
+    const left = cx - w / 2
+    const top = cy - h / 2
     const el = createImageElement(
-      cx - w / 2,
-      cy - h / 2,
+      left,
+      top,
       w,
       h,
       src,
@@ -481,9 +496,7 @@ export class Bembeyaz {
       const t = this.toolManager.getActiveToolName()
       if (t === 'text') {
         if (hasTextKeys) {
-          if (style.stroke !== undefined) this.penOptions = { ...this.penOptions, textStrokeColor: style.stroke }
           if (style.fill !== undefined && style.fill !== 'transparent') this.penOptions = { ...this.penOptions, color: style.fill }
-          if (style.strokeWidth !== undefined) this.penOptions = { ...this.penOptions, textStrokeWidth: style.strokeWidth }
           if (style.opacity !== undefined) this.penOptions = { ...this.penOptions, opacity: style.opacity }
           if (style.fontFamily !== undefined) this.penOptions = { ...this.penOptions, textFontFamily: style.fontFamily }
           if (style.fontSize !== undefined) this.penOptions = { ...this.penOptions, textFontSize: style.fontSize }
@@ -517,9 +530,7 @@ export class Bembeyaz {
         this.scene.updateElement(id, (e) => {
           if (e.type !== 'text') return e
           let next = { ...e }
-          if (style.stroke !== undefined) next = { ...next, strokeColor: style.stroke }
           if (style.fill !== undefined && style.fill !== 'transparent') next = { ...next, color: style.fill }
-          if (style.strokeWidth !== undefined) next = { ...next, strokeWidth: style.strokeWidth }
           if (style.opacity !== undefined) next = { ...next, opacity: style.opacity }
           if (style.fontFamily !== undefined) next = { ...next, fontFamily: style.fontFamily }
           if (style.fontSize !== undefined) next = { ...next, fontSize: style.fontSize }
@@ -559,9 +570,7 @@ export class Bembeyaz {
       if (style.strokeDash !== undefined) this.penOptions = { ...this.penOptions, strokeDash: style.strokeDash }
     }
     if (updatedText) {
-      if (style.stroke !== undefined) this.penOptions = { ...this.penOptions, textStrokeColor: style.stroke }
       if (style.fill !== undefined && style.fill !== 'transparent') this.penOptions = { ...this.penOptions, color: style.fill }
-      if (style.strokeWidth !== undefined) this.penOptions = { ...this.penOptions, textStrokeWidth: style.strokeWidth }
       if (style.opacity !== undefined) this.penOptions = { ...this.penOptions, opacity: style.opacity }
       if (style.fontFamily !== undefined) this.penOptions = { ...this.penOptions, textFontFamily: style.fontFamily }
       if (style.fontSize !== undefined) this.penOptions = { ...this.penOptions, textFontSize: style.fontSize }
@@ -580,9 +589,9 @@ export class Bembeyaz {
         if (first?.type === 'text') {
           const t = normalizeTextElement(first)
           return defaultElementStyle({
-            stroke: t.strokeColor,
+            stroke: t.color,
             fill: t.color,
-            strokeWidth: t.strokeWidth,
+            strokeWidth: 0,
             opacity: t.opacity,
             strokeDash: 'solid',
           })
@@ -640,6 +649,49 @@ export class Bembeyaz {
     document.body.appendChild(a)
     a.click()
     a.remove()
+  }
+
+  /** Copy the current static canvas (same pixels as PNG export) to the system clipboard. */
+  async copyImageToClipboard(): Promise<void> {
+    if (this.destroyed) return
+    this.renderLoop.flush()
+    const canvas = this.canvas.staticCanvas
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'))
+    if (!blob) throw new Error('Bembeyaz: could not encode PNG')
+    if (!navigator.clipboard?.write) throw new Error('Bembeyaz: Clipboard API not available')
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  }
+
+  /** Download the scene as a standalone SVG file (vector shapes; embedded images). */
+  exportToSvgDownload(filename = 'bembeyaz.svg'): void {
+    if (this.destroyed) return
+    const svg = exportSceneToSvgString(this.scene, this.backgroundColor)
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  /** Serialize selected elements as JSON for clipboard (paste not implemented). */
+  copySelectedElementsToClipboard(): void {
+    if (this.destroyed || this.selection.length === 0) return
+    const elements = this.selection
+      .map((id) => this.scene.getById(id))
+      .filter((e): e is Element => Boolean(e))
+    if (elements.length === 0) return
+    const payload = { v: 1 as const, elements: elements.map((e) => cloneElement(e)) }
+    void navigator.clipboard?.writeText(JSON.stringify(payload))
+  }
+
+  cutSelectedElements(): void {
+    this.copySelectedElementsToClipboard()
+    this.deleteSelected()
   }
 
   setHandMode(enabled: boolean): void {

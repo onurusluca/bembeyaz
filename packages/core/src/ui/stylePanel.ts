@@ -28,21 +28,54 @@ const FONT_PRESETS: readonly { label: string; value: string }[] = [
   { label: 'Mono', value: 'ui-monospace, "Cascadia Code", Consolas, monospace' },
 ]
 
+export interface StylePanelLabels {
+  stroke: string
+  fill: string
+  textColor: string
+  noFill: string
+  delete: string
+  copy: string
+  cut: string
+}
+
+const DEFAULT_LABELS: StylePanelLabels = {
+  stroke: 'Stroke',
+  fill: 'Fill',
+  textColor: 'Text',
+  noFill: 'No fill',
+  delete: 'Delete',
+  copy: 'Copy',
+  cut: 'Cut',
+}
+
+export interface StylePanelConfig {
+  onStyleChange: (patch: SelectionStylePatch) => void
+  onDeleteSelection?: () => void
+  onCopySelection?: () => void
+  onCutSelection?: () => void
+}
+
 function nearestStep<T extends number>(value: number, steps: readonly T[]): T {
   return steps.reduce((a, b) => (Math.abs(b - value) < Math.abs(a - value) ? b : a))
 }
 
+interface ColorPopoverShowOpts {
+  showNoFill?: boolean
+  onNoFill?: () => void
+}
+
 interface ColorPopoverHandle {
-  show(anchor: HTMLElement, onPick: (color: string) => void): void
+  show(anchor: HTMLElement, onPick: (color: string) => void, opts?: ColorPopoverShowOpts): void
   hide(): void
   destroy(): void
 }
 
-function createColorPopover(): ColorPopoverHandle {
+function createColorPopover(labels: StylePanelLabels): ColorPopoverHandle {
   const pop = el('div', 'bbz-color-pop')
   document.body.appendChild(pop)
 
   let activeCb: ((c: string) => void) | null = null
+  let activeNoFill: (() => void) | null = null
   let open = false
 
   for (const color of COLOR_PALETTE) {
@@ -57,17 +90,33 @@ function createColorPopover(): ColorPopoverHandle {
     pop.appendChild(b)
   }
 
+  const noFillBtn = btn('bbz-color-pop-nofill', labels.noFill)
+  noFillBtn.hidden = true
+  pop.appendChild(noFillBtn)
+  noFillBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation()
+    activeNoFill?.()
+    hide()
+  })
+
   const onOutside = (e: PointerEvent) => {
     if (!pop.contains(e.target as Node)) hide()
   }
 
-  function show(anchor: HTMLElement, onPick: (color: string) => void): void {
+  function show(anchor: HTMLElement, onPick: (color: string) => void, opts?: ColorPopoverShowOpts): void {
     if (open) {
       hide()
       return
     }
     open = true
     activeCb = onPick
+    if (opts?.showNoFill && opts.onNoFill) {
+      noFillBtn.hidden = false
+      activeNoFill = opts.onNoFill
+    } else {
+      noFillBtn.hidden = true
+      activeNoFill = null
+    }
     pop.classList.add('bbz-color-pop--open')
     const r = anchor.getBoundingClientRect()
     pop.style.left = `${r.left + r.width / 2}px`
@@ -81,6 +130,8 @@ function createColorPopover(): ColorPopoverHandle {
     if (!open) return
     open = false
     activeCb = null
+    activeNoFill = null
+    noFillBtn.hidden = true
     pop.classList.remove('bbz-color-pop--open')
     document.removeEventListener('pointerdown', onOutside, { capture: true })
   }
@@ -105,7 +156,6 @@ interface BuiltPanel {
   layout: StylePanelLayout
   strokeSwatch: HTMLButtonElement
   fillSwatch: HTMLButtonElement
-  fillClearBtn: HTMLButtonElement | null
   shapeWidthButtons: Map<number, HTMLButtonElement> | null
   textWidthButtons: Map<number, HTMLButtonElement> | null
   opacityButtons: Map<number, HTMLButtonElement> | null
@@ -132,31 +182,53 @@ function makeBlock(sectionEl: HTMLElement): HTMLElement {
   return block
 }
 
+function swatchWithCaption(caption: string, swatch: HTMLElement): HTMLElement {
+  const row = el('div', 'bbz-swatch-row')
+  const cap = el('span', 'bbz-swatch-caption')
+  cap.textContent = caption
+  row.appendChild(cap)
+  row.appendChild(swatch)
+  return row
+}
+
 function buildPanel(
   layout: StylePanelLayout,
-  onStyleChange: (patch: SelectionStylePatch) => void,
+  panelConfig: StylePanelConfig,
   colorPop: ColorPopoverHandle,
+  labels: StylePanelLabels,
 ): { panel: BuiltPanel; topLevelNodes: HTMLElement[] } {
   const topLevelNodes: HTMLElement[] = []
+  const onStyleChange = panelConfig.onStyleChange
 
   const strokeSwatch = btn('bbz-swatch bbz-swatch-stroke')
-  strokeSwatch.title = 'Stroke colour'
-
   const fillSwatch = btn('bbz-swatch bbz-swatch-fill')
-  fillSwatch.title = 'Fill colour'
 
-  const fillClearBtn = layout.fillClear ? btn('bbz-fill-clear', '∅') : null
-  if (fillClearBtn) fillClearBtn.title = 'No fill'
-
-  const colorSection = el('div', 'bbz-style-section')
-  colorSection.appendChild(strokeSwatch)
+  const colorSection = el('div', 'bbz-style-section bbz-style-section-colors')
+  if (layout.strokeSwatch) {
+    colorSection.appendChild(swatchWithCaption(labels.stroke, strokeSwatch))
+  }
   if (layout.fillSwatch) {
-    const fillGroup = el('div', 'bbz-fill-group')
-    fillGroup.appendChild(fillSwatch)
-    if (fillClearBtn) fillGroup.appendChild(fillClearBtn)
-    colorSection.appendChild(fillGroup)
+    const cap = layout.textColorOnly ? labels.textColor : labels.fill
+    colorSection.appendChild(swatchWithCaption(cap, fillSwatch))
   }
   topLevelNodes.push(colorSection)
+
+  if (layout.selectionActions) {
+    const actionSection = el('div', 'bbz-style-section bbz-style-selection-actions')
+    const delBtn = btn('bbz-action-btn', labels.delete)
+    delBtn.title = labels.delete
+    const copyBtn = btn('bbz-action-btn', labels.copy)
+    copyBtn.title = labels.copy
+    const cutBtn = btn('bbz-action-btn', labels.cut)
+    cutBtn.title = labels.cut
+    delBtn.addEventListener('click', () => panelConfig.onDeleteSelection?.())
+    copyBtn.addEventListener('click', () => panelConfig.onCopySelection?.())
+    cutBtn.addEventListener('click', () => panelConfig.onCutSelection?.())
+    actionSection.appendChild(delBtn)
+    actionSection.appendChild(copyBtn)
+    actionSection.appendChild(cutBtn)
+    topLevelNodes.push(makeBlock(actionSection))
+  }
 
   let shapeWidthButtons: Map<number, HTMLButtonElement> | null = null
   let textWidthButtons: Map<number, HTMLButtonElement> | null = null
@@ -328,7 +400,9 @@ function buildPanel(
   }
 
   function applyValues(style: ElementStyle, ctx: StyleSyncCtx): void {
-    updateStrokeSwatch(style.stroke)
+    if (layout.strokeSwatch) {
+      updateStrokeSwatch(style.stroke)
+    }
     if (layout.fillSwatch) {
       updateFillSwatch(style.fill ?? 'transparent')
     }
@@ -354,26 +428,33 @@ function buildPanel(
     }
   }
 
-  strokeSwatch.addEventListener('click', () => {
-    colorPop.show(strokeSwatch, (color) => {
-      updateStrokeSwatch(color)
-      onStyleChange({ stroke: color })
-    })
-  })
-
-  if (layout.fillSwatch) {
-    fillSwatch.addEventListener('click', () => {
-      colorPop.show(fillSwatch, (color) => {
-        updateFillSwatch(color)
-        onStyleChange({ fill: color })
+  if (layout.strokeSwatch) {
+    strokeSwatch.addEventListener('click', () => {
+      colorPop.show(strokeSwatch, (color) => {
+        updateStrokeSwatch(color)
+        onStyleChange({ stroke: color })
       })
     })
   }
 
-  if (fillClearBtn) {
-    fillClearBtn.addEventListener('click', () => {
-      updateFillSwatch('transparent')
-      onStyleChange({ fill: 'transparent' })
+  if (layout.fillSwatch) {
+    fillSwatch.addEventListener('click', () => {
+      colorPop.show(
+        fillSwatch,
+        (color) => {
+          updateFillSwatch(color)
+          onStyleChange({ fill: color })
+        },
+        layout.fillNoFillInPopover
+          ? {
+              showNoFill: true,
+              onNoFill: () => {
+                updateFillSwatch('transparent')
+                onStyleChange({ fill: 'transparent' })
+              },
+            }
+          : undefined,
+      )
     })
   }
 
@@ -444,7 +525,6 @@ function buildPanel(
     layout,
     strokeSwatch,
     fillSwatch,
-    fillClearBtn,
     shapeWidthButtons,
     textWidthButtons,
     opacityButtons,
@@ -458,9 +538,16 @@ function buildPanel(
   return { panel, topLevelNodes }
 }
 
-export function createStylePanel(onStyleChange: (patch: SelectionStylePatch) => void): StylePanelHandle {
+export function createStylePanel(
+  panelConfig: StylePanelConfig,
+  labels: StylePanelLabels = DEFAULT_LABELS,
+): StylePanelHandle {
   const root = el('div', 'bbz-style-panel')
-  const colorPop = createColorPopover()
+  const titleEl = el('div', 'bbz-style-panel-title')
+  root.appendChild(titleEl)
+  titleEl.hidden = true
+
+  const colorPop = createColorPopover(labels)
 
   let lastLayoutKey = ''
   let panel: BuiltPanel | null = null
@@ -474,25 +561,26 @@ export function createStylePanel(onStyleChange: (patch: SelectionStylePatch) => 
       root.classList.toggle('bbz-style-panel--hidden', !layout.showPanel)
 
       if (!layout.showPanel) {
-        root.replaceChildren()
+        root.replaceChildren(titleEl)
+        titleEl.hidden = true
         lastLayoutKey = ''
         panel = null
         return
       }
 
+      titleEl.textContent = ctx.panelTitle ?? ''
+      titleEl.hidden = !ctx.panelTitle
+
       const key = layoutContentKey(layout)
       if (key !== lastLayoutKey || !panel) {
         lastLayoutKey = key
-        const built = buildPanel(layout, onStyleChange, colorPop)
+        const built = buildPanel(layout, panelConfig, colorPop, labels)
         panel = built.panel
-        root.replaceChildren(...built.topLevelNodes)
+        root.replaceChildren(titleEl, ...built.topLevelNodes)
       }
 
-      const titles = ctx.allText
-      panel.strokeSwatch.title = titles ? 'Outline colour' : 'Stroke colour'
-      if (layout.fillSwatch) {
-        panel.fillSwatch.title = titles ? 'Text colour' : 'Fill colour'
-      }
+      panel.strokeSwatch.title = labels.stroke
+      panel.fillSwatch.title = layout.textColorOnly ? labels.textColor : labels.fill
 
       panel.applyValues(ctx.style, ctx)
     },

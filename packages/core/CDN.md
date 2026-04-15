@@ -64,3 +64,21 @@ Point types at the same `@ref` as the JS (or copy `index.d.ts` locally):
 ```
 
 Or install from Git with Bun/npm later and drop the path hack.
+
+## Troubleshooting
+
+### “Failed to fetch … from GitHub” / 404 on jsDelivr
+
+1. **Repository must be public.** The `cdn.jsdelivr.net/gh/...` endpoint only works for **public** GitHub repositories. If the repo is private, jsDelivr cannot read it. Fix: **Settings → General → Danger zone → Change repository visibility → Public**, or use a different delivery method (npm registry CDN, self-hosted static file, S3, etc.).
+
+2. **`dist/` must be on the branch you reference.** Push is not enough if you did not `git add packages/core/dist` and commit. Check in the browser:  
+   `https://github.com/<user>/<repo>/blob/main/packages/core/dist/index.js`  
+   If that 404s, the file is not on GitHub.
+
+3. **Branch name.** If your default branch is not `main`, use `@master` or the correct branch in the URL.
+
+### If you need to stay private
+
+- Publish `@bembeyaz/core` to **npm** (public package), then use  
+  `https://cdn.jsdelivr.net/npm/@bembeyaz/core@VERSION/dist/index.js`  
+  or host `packages/core/dist/index.js` on any static host you control.

@@ -10,8 +10,14 @@ export interface StyleSyncCtx {
   hasNonText: boolean
   /** Selection includes at least one text element */
   hasText: boolean
-  /** Every selected item is text — typography + text outline controls */
+  /** Every selected item is text — typography + text colour */
   allText: boolean
+  /** Text tool or all-text selection: one colour swatch only (no stroke/outline). */
+  textColorOnly: boolean
+  /** Heading shown above the style controls (tool name or "Selection"). */
+  panelTitle: string | null
+  /** Delete / copy / cut row (select tool with selection). */
+  showSelectionActions?: boolean
   textFontFamily?: string
   textFontSize?: number
   textAlign?: TextAlign
@@ -25,21 +31,24 @@ export interface StyleSyncCtx {
  */
 export interface StylePanelLayout {
   showPanel: boolean
-  /** Stroke colour swatch */
+  /** Stroke / line colour swatch */
   strokeSwatch: boolean
   /** Fill / text colour swatch */
   fillSwatch: boolean
-  /** Clear fill (shapes only, not all-text selection) */
-  fillClear: boolean
+  /** "No fill" appears in the fill colour popover (not beside the swatch). */
+  fillNoFillInPopover: boolean
   /** Shape / pen / line stroke thickness presets */
   shapeStrokeWidth: boolean
-  /** Text outline thickness (all-text selection or text tool defaults) */
+  /** Text outline thickness — hidden when `textColorOnly` */
   textOutlineWidth: boolean
   /** Font size, family, alignment */
   typography: boolean
   opacity: boolean
   /** Solid / dashed / dotted */
   strokeDash: boolean
+  /** Mirrors `StyleSyncCtx.textColorOnly` for panel build logic. */
+  textColorOnly: boolean
+  selectionActions: boolean
 }
 
 export function resolveStylePanelLayout(ctx: StyleSyncCtx): StylePanelLayout {
@@ -48,39 +57,48 @@ export function resolveStylePanelLayout(ctx: StyleSyncCtx): StylePanelLayout {
       showPanel: false,
       strokeSwatch: false,
       fillSwatch: false,
-      fillClear: false,
+      fillNoFillInPopover: false,
       shapeStrokeWidth: false,
       textOutlineWidth: false,
       typography: false,
       opacity: false,
       strokeDash: false,
+      textColorOnly: false,
+      selectionActions: false,
     }
   }
 
-  const showFill = ctx.hasFillable || ctx.hasText
+  const textColorOnly = ctx.textColorOnly
+  const showFill = (ctx.hasFillable || ctx.hasText) && !textColorOnly
+  const textFillOnly = textColorOnly
 
   return {
     showPanel: true,
-    strokeSwatch: true,
-    fillSwatch: showFill,
-    fillClear: ctx.hasFillable && !ctx.allText,
+    strokeSwatch: !textFillOnly,
+    fillSwatch: showFill || textFillOnly,
+    fillNoFillInPopover: ctx.hasFillable && !ctx.allText,
     shapeStrokeWidth: ctx.hasNonText,
-    textOutlineWidth: ctx.allText,
+    textOutlineWidth: ctx.allText && !textColorOnly,
     typography: ctx.allText,
     opacity: true,
     strokeDash: ctx.hasNonText,
+    textColorOnly,
+    selectionActions: Boolean(ctx.showSelectionActions),
   }
 }
 
 export function layoutContentKey(layout: StylePanelLayout): string {
   if (!layout.showPanel) return ''
   return [
+    layout.strokeSwatch ? '1' : '0',
     layout.fillSwatch ? '1' : '0',
-    layout.fillClear ? '1' : '0',
+    layout.fillNoFillInPopover ? '1' : '0',
     layout.shapeStrokeWidth ? '1' : '0',
     layout.textOutlineWidth ? '1' : '0',
     layout.typography ? '1' : '0',
     layout.opacity ? '1' : '0',
     layout.strokeDash ? '1' : '0',
+    layout.textColorOnly ? '1' : '0',
+    layout.selectionActions ? '1' : '0',
   ].join('')
 }

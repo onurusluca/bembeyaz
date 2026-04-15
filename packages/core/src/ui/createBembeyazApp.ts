@@ -98,9 +98,25 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
     drawToolbarButtons.set(d.id, toolBtn)
   }
 
-  const stylePanel = createStylePanel((patch) => {
-    whiteboard.setSelectedStyle(patch)
-  })
+  const stylePanel = createStylePanel(
+    {
+      onStyleChange: (patch) => {
+        whiteboard.setSelectedStyle(patch)
+      },
+      onDeleteSelection: () => whiteboard.deleteSelected(),
+      onCopySelection: () => whiteboard.copySelectedElementsToClipboard(),
+      onCutSelection: () => whiteboard.cutSelectedElements(),
+    },
+    {
+      stroke: locale.styleStroke,
+      fill: locale.styleFill,
+      textColor: locale.styleTextColor,
+      noFill: locale.styleNoFill,
+      delete: locale.editDelete,
+      copy: locale.editCopy,
+      cut: locale.editCut,
+    },
+  )
   wrap.appendChild(stylePanel.root)
 
   let currentSelectedIds: readonly string[] = []
@@ -124,6 +140,9 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
         hasNonText: false,
         hasText: false,
         allText: false,
+        textColorOnly: false,
+        panelTitle: null,
+        showSelectionActions: false,
       })
     }
 
@@ -144,6 +163,7 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
       const hasNonText = selected.some((e) => e.type !== 'text')
       const hasText = selected.some((e) => e.type === 'text')
       const allText = selected.length > 0 && selected.every((e) => e.type === 'text')
+      const textColorOnly = allText
       const firstText = hasText ? selected.find((e) => e.type === 'text') : undefined
       const firstNonText = hasNonText ? selected.find((e) => e.type !== 'text') : undefined
       let shapeStrokeWidth: number | undefined
@@ -161,11 +181,14 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
         hasNonText,
         hasText,
         allText,
+        textColorOnly,
+        panelTitle: locale.stylePanelSelection,
         textFontFamily: firstText?.type === 'text' ? firstText.fontFamily : undefined,
         textFontSize: firstText?.type === 'text' ? firstText.fontSize : undefined,
         textAlign: firstText?.type === 'text' ? firstText.textAlign : undefined,
         shapeStrokeWidth,
         textOutlineWidth,
+        showSelectionActions: true,
       })
       return
     }
@@ -177,7 +200,6 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
     let allText = false
     switch (tool) {
       case 'pen':
-        hasFillable = true
         hasNonText = true
         break
       case 'rectangle':
@@ -199,6 +221,7 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
       default:
         break
     }
+    const drawLabel = (locale as Record<string, string>)[tool] ?? tool
     stylePanel.sync({
       style,
       hasSelection: true,
@@ -206,11 +229,14 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
       hasNonText,
       hasText,
       allText,
+      textColorOnly: tool === 'text',
+      panelTitle: drawLabel,
       textFontFamily: pen.textFontFamily,
       textFontSize: pen.textFontSize,
       textAlign: pen.textAlign,
       shapeStrokeWidth: pen.strokeWidth,
       textOutlineWidth: pen.textStrokeWidth,
+      showSelectionActions: false,
     })
   }
 
@@ -322,6 +348,20 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
     menu.classList.remove('open')
   })
 
+  const copyImageItem = btn('bbz-menu-item bbz-menu-item--action', `<span>${locale.copyImage}</span>`)
+  copyImageItem.addEventListener('click', () => {
+    void whiteboard.copyImageToClipboard().catch(() => {})
+    menu.classList.remove('open')
+  })
+  menuPanel.appendChild(copyImageItem)
+
+  const exportSvgItem = btn('bbz-menu-item bbz-menu-item--action', `<span>${locale.exportSvg}</span>`)
+  exportSvgItem.addEventListener('click', () => {
+    whiteboard.exportToSvgDownload()
+    menu.classList.remove('open')
+  })
+  menuPanel.appendChild(exportSvgItem)
+
   menuPanel.appendChild(el('div', 'bbz-menu-sep'))
   const gridSectionLabel = el('div', 'bbz-menu-label')
   gridSectionLabel.textContent = locale.grid
@@ -378,6 +418,47 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
   })
   syncGridMenu()
 
+  const onStageDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  }
+  const onStageDrop = (e: DragEvent) => {
+    e.preventDefault()
+    const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+    if (files.length === 0) return
+    const { x, y } = whiteboard.clientPointToWorld(e.clientX, e.clientY)
+    void (async () => {
+      let stack = 0
+      let first = true
+      for (const file of files) {
+        try {
+          const dataUrl = await new Promise<string>((res, rej) => {
+            const r = new FileReader()
+            r.onload = () => res(r.result as string)
+            r.onerror = () => rej(r.error)
+            r.readAsDataURL(file)
+          })
+          const { w, h } = await new Promise<{ w: number; h: number }>((res, rej) => {
+            const img = new Image()
+            img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight })
+            img.onerror = () => rej(new Error('decode'))
+            img.src = dataUrl
+          })
+          whiteboard.insertImageFromDataUrl(dataUrl, w, h, 0, !first, { x: x + stack, y: y + stack })
+          first = false
+          stack += 24
+        } catch {
+          /* skip */
+        }
+      }
+      whiteboard.setTool('select')
+      syncToolbar()
+      syncStylePanel()
+    })()
+  }
+  stage.addEventListener('dragover', onStageDragOver)
+  stage.addEventListener('drop', onStageDrop)
+
   const onMenuToggle = () => {
     const open = !menu.classList.contains('open')
     menu.classList.toggle('open', open)
@@ -425,6 +506,8 @@ export function createBembeyazApp(options: BembeyazAppOptions): BembeyazApp {
       whiteboard.off('selection:change', onSelectionChange)
       document.removeEventListener('keydown', onKeyDown)
       document.removeEventListener('pointerdown', onDocPointerDown)
+      stage.removeEventListener('dragover', onStageDragOver)
+      stage.removeEventListener('drop', onStageDrop)
       menuBtn.removeEventListener('click', onMenuToggle)
       stylePanel.destroy()
       whiteboard.destroy()

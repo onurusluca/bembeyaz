@@ -252,6 +252,19 @@ export function ensureStyles(): void {
       pointer-events: none;
       transform: translateY(-50%) translateX(-6px);
     }
+    .bbz-style-panel-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--bbz-muted);
+      margin: 0 0 6px 0;
+      padding: 0 2px;
+      line-height: 1.2;
+    }
+    .bbz-style-panel-title[hidden] {
+      display: none !important;
+    }
     .bbz-style-section {
       display: flex;
       align-items: center;
@@ -262,6 +275,54 @@ export function ensureStyles(): void {
     }
     .bbz-style-section-dash {
       gap: 5px;
+    }
+    .bbz-style-section-colors {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .bbz-style-selection-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    .bbz-action-btn {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 26px;
+      padding: 0 6px;
+      border-radius: 7px;
+      border: 1px solid var(--bbz-btn-border);
+      background: var(--bbz-btn-bg);
+      cursor: pointer;
+      color: var(--bbz-text);
+      font-size: 10px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+    .bbz-action-btn:hover { background: var(--bbz-btn-hover); }
+    .bbz-action-btn:first-child {
+      color: var(--bbz-danger);
+    }
+    .bbz-action-btn:first-child:hover {
+      background: rgba(208, 59, 59, 0.08);
+    }
+    .bbz-swatch-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bbz-swatch-caption {
+      flex: 0 0 46px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: var(--bbz-muted);
+      line-height: 1.2;
     }
     .bbz-style-sep {
       width: 100%;
@@ -326,8 +387,11 @@ export function ensureStyles(): void {
     .bbz-color-pop {
       position: fixed;
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
+      align-content: flex-start;
       gap: 7px;
+      max-width: 220px;
       padding: 8px 12px;
       border-radius: 12px;
       border: 1px solid var(--bbz-border);
@@ -361,6 +425,23 @@ export function ensureStyles(): void {
       transform: scale(1.2);
       border-color: rgba(0, 0, 0, 0.18);
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+    .bbz-color-pop-nofill {
+      flex: 1 1 100%;
+      margin: 2px 0 0 0;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px dashed var(--bbz-border);
+      background: var(--bbz-btn-bg);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--bbz-muted);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .bbz-color-pop-nofill:hover {
+      background: #f4f8fd;
+      color: var(--bbz-text);
     }
 
     /* ── Step buttons (width & opacity) ─────────────────────────────────── */

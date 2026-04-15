@@ -6,6 +6,7 @@ import {
   resolveAttachedArrow,
   type ArrowHandleId,
 } from '../scene/connectorGeometry.js'
+import { translateElementByDelta } from '../scene/elementTranslate.js'
 import {
   aspectRatioResizeRect,
   cloneElement,
@@ -404,7 +405,7 @@ export class SelectTool {
           const tgtMv = ids.includes(el.targetId!)
           if (srcMv || tgtMv) continue
         }
-        c.scene.updateElement(id, (e) => this.translateElement(e, dx, dy), { emitCollaboration: false })
+        c.scene.updateElement(id, (e) => translateElementByDelta(e, dx, dy), { emitCollaboration: false })
       }
       c.emitSceneChange()
       c.requestStaticRender()
@@ -647,46 +648,6 @@ export class SelectTool {
     if ((el.type === 'line' || el.type === 'arrow') && lineEp && !(el.type === 'arrow' && isAttachedArrow(el))) {
       if (lineEp === 'start') return { ...el, x1: wx, y1: wy }
       return { ...el, x2: wx, y2: wy }
-    }
-    return el
-  }
-
-  private translateElement(el: Element, dx: number, dy: number): Element {
-    if (el.type === 'path') {
-      return {
-        ...el,
-        points: el.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
-      }
-    }
-    if (el.type === 'rectangle' || el.type === 'ellipse') {
-      return {
-        ...el,
-        x: el.x + dx,
-        y: el.y + dy,
-      }
-    }
-    if (el.type === 'line' || el.type === 'arrow') {
-      if (el.type === 'arrow' && isAttachedArrow(el)) {
-        return {
-          ...el,
-          bendOffsetX: (el.bendOffsetX ?? 0) + dx,
-          bendOffsetY: (el.bendOffsetY ?? 0) + dy,
-        }
-      }
-      return {
-        ...el,
-        x1: el.x1 + dx,
-        y1: el.y1 + dy,
-        x2: el.x2 + dx,
-        y2: el.y2 + dy,
-      }
-    }
-    if (el.type === 'text' || el.type === 'image') {
-      return {
-        ...el,
-        x: el.x + dx,
-        y: el.y + dy,
-      }
     }
     return el
   }

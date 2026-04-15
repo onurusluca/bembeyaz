@@ -35,11 +35,19 @@ function worldDash(ctx: CanvasRenderingContext2D, zoom: number, on: number, off:
   ctx.setLineDash([on / zoom, off / zoom])
 }
 
-function applyLineDash(ctx: CanvasRenderingContext2D, dash: StrokeDash, zoom: number): void {
+function applyLineDash(
+  ctx: CanvasRenderingContext2D,
+  dash: StrokeDash,
+  zoom: number,
+  strokeWidth = 2,
+): void {
+  const m = Math.max(1, strokeWidth * 0.5)
   if (dash === 'dashed') {
-    worldDash(ctx, zoom, 10, 6)
+    worldDash(ctx, zoom, 10 * m, 6 * m)
   } else if (dash === 'dotted') {
-    worldDash(ctx, zoom, 2, 5)
+    const dot = Math.max(2, strokeWidth * 0.85)
+    const gap = Math.max(5, strokeWidth * 2.2)
+    worldDash(ctx, zoom, dot, gap)
     ctx.lineCap = 'round'
   } else {
     noDash(ctx)
@@ -80,7 +88,7 @@ export function renderPathElement(ctx: CanvasRenderingContext2D, el: PathElement
   ctx.lineWidth = el.style.strokeWidth
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  applyLineDash(ctx, el.style.strokeDash ?? 'solid', zoom)
+  applyLineDash(ctx, el.style.strokeDash ?? 'solid', zoom, el.style.strokeWidth)
   ctx.beginPath()
   if (pts.length === 1) {
     ctx.moveTo(pts[0]!.x, pts[0]!.y)
@@ -109,17 +117,11 @@ export function renderTextElement(ctx: CanvasRenderingContext2D, el: TextElement
   const lines = t.text.length ? t.text.split('\n') : ['']
   const lineHeight = t.fontSize * TEXT_LINE_HEIGHT_FACTOR
   let y = t.y
-  const drawStroke = t.strokeWidth > 0 && t.strokeColor !== 'transparent'
   for (const line of lines) {
     const w = ctx.measureText(line).width
     let x = t.x
     if (t.textAlign === 'center') x = t.x + (t.width - w) / 2
     else if (t.textAlign === 'right') x = t.x + t.width - w
-    if (drawStroke) {
-      ctx.strokeStyle = t.strokeColor
-      ctx.lineWidth = t.strokeWidth
-      ctx.strokeText(line, x, y)
-    }
     ctx.fillStyle = t.color
     ctx.fillText(line, x, y)
     y += lineHeight
@@ -186,7 +188,7 @@ export function renderAttachedArrowElement(
   ctx.lineWidth = el.style.strokeWidth
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  applyLineDash(ctx, el.style.strokeDash ?? 'solid', zoom)
+  applyLineDash(ctx, el.style.strokeDash ?? 'solid', zoom, el.style.strokeWidth)
   ctx.beginPath()
   ctx.moveTo(p0.x, p0.y)
   ctx.quadraticCurveTo(p1.x, p1.y, p2.x, p2.y)
@@ -244,7 +246,7 @@ export function renderShapeElement(
   ctx.lineWidth = el.style.strokeWidth
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  applyLineDash(ctx, el.style.strokeDash ?? 'solid', zoom)
+  applyLineDash(ctx, el.style.strokeDash ?? 'solid', zoom, el.style.strokeWidth)
   if (el.type === 'rectangle') {
     if (hasFill) {
       ctx.fillStyle = el.style.fill
@@ -294,7 +296,7 @@ export function renderPathPreview(
   ctx.globalAlpha = style?.opacity ?? 0.7
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  applyLineDash(ctx, style?.strokeDash ?? 'solid', zoom)
+  applyLineDash(ctx, style?.strokeDash ?? 'solid', zoom, style?.strokeWidth ?? 2)
   ctx.beginPath()
   ctx.moveTo(points[0]!.x, points[0]!.y)
   for (let i = 1; i < points.length; i++) {
@@ -412,16 +414,27 @@ function buildLaserPath(ctx: CanvasRenderingContext2D, pts: readonly LaserPoint[
   ctx.lineTo(pts[pts.length - 1]!.x, pts[pts.length - 1]!.y)
 }
 
+function parseTrailRgb(css: string): { r: number; g: number; b: number } {
+  const s = css.trim()
+  if (s.startsWith('#') && s.length === 7) {
+    return {
+      r: parseInt(s.slice(1, 3), 16),
+      g: parseInt(s.slice(3, 5), 16),
+      b: parseInt(s.slice(5, 7), 16),
+    }
+  }
+  const m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+  if (m) return { r: +m[1]!, g: +m[2]!, b: +m[3]! }
+  return { r: 255, g: 60, b: 82 }
+}
+
 /**
  * Render fading laser trails on the interactive canvas (world-space transform already applied).
  *
  * Fade model:
- *   - While drawing: a rolling window of LASER_MAX_LENGTH world-units is visible.
- *     Drawing faster = tail disappears faster (length-based, not time-based).
- *   - After pointer up: the remaining trail fades over LASER_AFTER_FADE_MS.
- *
- * Smoothing: quadratic bezier midpoints, rendered in N alpha groups so the trail
- * fades from transparent at the tail to bright at the head.
+ *   - While drawing (`upAt === null`): show the full path with uniform color (no chord gradient).
+ *   - After pointer up: shorten the visible tail by `LASER_MAX_LENGTH` × fade and fade alpha over
+ *     `LASER_AFTER_FADE_MS` (chord gradient is still wrong on curves; stroke is solid).
  */
 export function renderLaserTrails(
   ctx: CanvasRenderingContext2D,
@@ -436,10 +449,10 @@ export function renderLaserTrails(
   ctx.save()
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  ctx.strokeStyle = color
   noDash(ctx)
 
-  const NUM_GROUPS = 12
+  const rgb = parseTrailRgb(color)
+  const { r, g: green, b } = rgb
 
   for (const seg of segments) {
     const pts = seg.points
@@ -447,72 +460,117 @@ export function renderLaserTrails(
 
     const totalD = pts[pts.length - 1]!.d
 
-    // Segment-level alpha: 1 while drawing, ramps to 0 after pointer up
     let segAlpha = 1.0
     let maxVisible = LASER_MAX_LENGTH
     if (seg.upAt !== null) {
       const elapsed = now - seg.upAt
       segAlpha = Math.max(0, 1 - elapsed / LASER_AFTER_FADE_MS)
-      // As the segment fades, also shrink the visible length from the tail
       maxVisible = LASER_MAX_LENGTH * segAlpha
     }
     if (segAlpha < 0.01) continue
 
-    // Find the first visible point (based on length from head)
-    const minD = Math.max(0, totalD - maxVisible)
-    let startIdx = pts.findIndex((p) => p.d >= minD)
-    if (startIdx < 0) startIdx = 0
-    // Include one point before the cutoff so the bezier curve starts smoothly
-    if (startIdx > 0) startIdx--
-
-    const visible = pts.slice(startIdx)
+    let visible: readonly LaserPoint[]
+    if (seg.upAt === null) {
+      visible = pts
+    } else {
+      const minD = Math.max(0, totalD - maxVisible)
+      let startIdx = pts.findIndex((p) => p.d >= minD)
+      if (startIdx < 0) startIdx = 0
+      if (startIdx > 0) startIdx--
+      visible = pts.slice(startIdx)
+    }
     if (visible.length < 2) continue
 
-    const visMinD = visible[0]!.d
-    const visMaxD = visible[visible.length - 1]!.d
-    const visRange = Math.max(visMaxD - visMinD, 1)
-
-    // Divide visible points into NUM_GROUPS, each rendered as a smooth sub-curve.
-    // Alpha for each group is proportional to how close its midpoint is to the head.
-    const n = visible.length
-    for (let g = 0; g < NUM_GROUPS; g++) {
-      const gStart = Math.floor((g * n) / NUM_GROUPS)
-      // Overlap by 1 point so adjacent groups connect seamlessly
-      const gEnd = Math.min(Math.floor(((g + 1) * n) / NUM_GROUPS) + 1, n)
-      if (gEnd - gStart < 2) continue
-
-      const groupPts = visible.slice(gStart, gEnd)
-      const midPt = groupPts[Math.floor(groupPts.length / 2)]!
-      // posAlpha: 0 at the tail, 1 at the head
-      const posAlpha = (midPt.d - visMinD) / visRange
-      const alpha = posAlpha * segAlpha
-      if (alpha < 0.02) continue
-
-      ctx.beginPath()
-      buildLaserPath(ctx, groupPts)
-
-      // Outer glow pass
-      ctx.globalAlpha = alpha * 0.18
-      ctx.lineWidth = 7 / zoom
-      ctx.stroke()
-
-      // Inner bright core (same path, no need for beginPath again)
-      ctx.globalAlpha = alpha * 0.88
-      ctx.lineWidth = 2.5 / zoom
-      ctx.stroke()
-    }
-
-    // Bright dot at the head of the visible trail
     const head = visible[visible.length - 1]!
-    ctx.globalAlpha = segAlpha * 0.9
+
+    const baseA = 0.9 * segAlpha
+    ctx.beginPath()
+    buildLaserPath(ctx, visible)
+    ctx.strokeStyle = `rgba(${r},${green},${b},${baseA})`
+    ctx.globalAlpha = 1
+    ctx.lineWidth = 3 / zoom
+    ctx.shadowColor = `rgba(${r},${green},${b},${0.5 * segAlpha})`
+    ctx.shadowBlur = 9
+    ctx.shadowOffsetX = 0
+    ctx.shadowOffsetY = 0
+    ctx.stroke()
+    ctx.shadowColor = 'transparent'
+    ctx.shadowBlur = 0
+
+    ctx.globalAlpha = segAlpha * 0.95
     ctx.fillStyle = '#ffffff'
     ctx.beginPath()
-    ctx.arc(head.x, head.y, 1.8 / zoom, 0, Math.PI * 2)
+    ctx.arc(head.x, head.y, 1.6 / zoom, 0, Math.PI * 2)
     ctx.fill()
-    ctx.globalAlpha = segAlpha * 0.48
+    ctx.globalAlpha = segAlpha * 0.55
     ctx.fillStyle = color
     ctx.beginPath()
-    ctx.arc(head.x, head.y, 4.5 / zoom, 0, Math.PI * 2)
+    ctx.arc(head.x, head.y, 3.8 / zoom, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  ctx.restore()
+}
+
+const ERASER_TRAIL_COLOR = '#64748b'
+
+/** Gray fading trail while erasing (same geometry model as the laser pointer). */
+export function renderEraserTrails(
+  ctx: CanvasRenderingContext2D,
+  segments: readonly LaserSegment[],
+  now: number,
+  zoom: number,
+): void {
+  if (segments.length === 0) return
+
+  ctx.save()
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  noDash(ctx)
+
+  const erRgb = parseTrailRgb(ERASER_TRAIL_COLOR)
+  const { r, g: eg, b } = erRgb
+
+  for (const seg of segments) {
+    const pts = seg.points
+    if (pts.length < 2) continue
+
+    const totalD = pts[pts.length - 1]!.d
+
+    let segAlpha = 1.0
+    let maxVisible = LASER_MAX_LENGTH
+    if (seg.upAt !== null) {
+      const elapsed = now - seg.upAt
+      segAlpha = Math.max(0, 1 - elapsed / LASER_AFTER_FADE_MS)
+      maxVisible = LASER_MAX_LENGTH * segAlpha
+    }
+    if (segAlpha < 0.01) continue
+
+    let visible: readonly LaserPoint[]
+    if (seg.upAt === null) {
+      visible = pts
+    } else {
+      const minD = Math.max(0, totalD - maxVisible)
+      let startIdx = pts.findIndex((p) => p.d >= minD)
+      if (startIdx < 0) startIdx = 0
+      if (startIdx > 0) startIdx--
+      visible = pts.slice(startIdx)
+    }
+    if (visible.length < 2) continue
+
+    const head = visible[visible.length - 1]!
+
+    ctx.beginPath()
+    buildLaserPath(ctx, visible)
+    ctx.strokeStyle = `rgba(${r},${eg},${b},${0.85 * segAlpha})`
+    ctx.globalAlpha = 1
+    ctx.lineWidth = 3.2 / zoom
+    ctx.stroke()
+
+    ctx.globalAlpha = segAlpha * 0.5
+    ctx.fillStyle = ERASER_TRAIL_COLOR
+    ctx.beginPath()
+    ctx.arc(head.x, head.y, 3.2 / zoom, 0, Math.PI * 2)
     ctx.fill()
   }
 
@@ -570,6 +628,8 @@ export interface InteractiveOverlayOptions {
   marqueeRect: AABB | null
   /** Active laser pointer trails to render (fading, time-based). */
   laserSegments: readonly LaserSegment[] | null
+  /** Eraser drag trail (gray), same fade model as the laser. */
+  eraserSegments: readonly LaserSegment[] | null
   /** Current timestamp for laser fade calculation (`Date.now()`). */
   laserNow: number
   /** Other users' cursors (from presence sync). */
@@ -610,6 +670,9 @@ export function renderInteractiveOverlay(opts: InteractiveOverlayOptions): void 
     )
   }
   const rl = opts.remoteLaser
+  if (opts.eraserSegments && opts.eraserSegments.length > 0) {
+    renderEraserTrails(interactiveCtx, opts.eraserSegments, opts.laserNow, opts.viewport.zoom)
+  }
   if (rl && rl.length > 0) {
     for (const { segments, color } of rl) {
       if (segments.length > 0) {

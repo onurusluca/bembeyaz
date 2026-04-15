@@ -10,7 +10,7 @@ const _S =
   'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
 
 export const ICONS: Record<UiToolId | 'menu' | 'exportPng' | 'grid', string> = {
-  select: `<svg ${_S}><path ${_T}/><path d="M7.904 17.563a1.2 1.2 0 0 0 2.228 .308l2.09 -3.093l4.907 4.907a1.067 1.067 0 0 0 1.509 0l1.047 -1.047a1.067 1.067 0 0 0 0 -1.509l-4.907 -4.907l3.113 -2.09a1.2 1.2 0 0 0 -.309 -2.228l-13.582 -3.904l3.904 13.563"/></svg>`,
+  select: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.2 4.2l13.2 9.8-5.6 1.4 3 7.2-3.1 1.3-3-7.2-4.4 3.9L6.2 4.2z"/></svg>`,
   hand: `<svg ${_S}><path ${_T}/><path d="M8 13v-7.5a1.5 1.5 0 0 1 3 0v6.5"/><path d="M11 5.5v-2a1.5 1.5 0 1 1 3 0v8.5"/><path d="M14 5.5a1.5 1.5 0 0 1 3 0v6.5"/><path d="M17 7.5a1.5 1.5 0 0 1 3 0v8.5a6 6 0 0 1 -6 6h-2h.208a6 6 0 0 1 -5.012 -2.7a69.74 69.74 0 0 1 -.196 -.3c-.312 -.479 -1.407 -2.388 -3.286 -5.728a1.5 1.5 0 0 1 .536 -2.022a1.867 1.867 0 0 1 2.28 .28l1.47 1.47"/></svg>`,
   erase: `<svg ${_S}><path ${_T}/><path d="M19 20h-10.5l-4.21 -4.3a1 1 0 0 1 0 -1.41l10 -10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41l-9.2 9.3"/><path d="M18 13.3l-6.3 -6.3"/></svg>`,
   menu: `<svg ${_S}><path ${_T}/><path d="M4 6l16 0"/><path d="M4 12l16 0"/><path d="M4 18l16 0"/></svg>`,
@@ -27,7 +27,7 @@ export const DRAW_ICONS: Record<DrawToolName, string> = {
   arrow: `<svg ${_S}><path ${_T}/><path d="M17 7l-10 10"/><path d="M8 7l9 0l0 9"/></svg>`,
   text: `<svg ${_S}><path ${_T}/><path d="M10 12h4"/><path d="M9 4a3 3 0 0 1 3 3v10a3 3 0 0 1 -3 3"/><path d="M15 4a3 3 0 0 0 -3 3v10a3 3 0 0 0 3 3"/></svg>`,
   image: `<svg ${_S}><path ${_T}/><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5 -5l-5 5"/></svg>`,
-  laser: `<svg ${_S}><path ${_T}/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/></svg>`,
+  laser: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></svg>`,
 }
 
 /** Dash icons for the style panel (inline SVG, 24×12). */

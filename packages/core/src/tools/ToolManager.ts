@@ -121,5 +121,6 @@ export class ToolManager {
 
   destroy(): void {
     this.laser.destroy()
+    this.eraser.destroy()
   }
 }

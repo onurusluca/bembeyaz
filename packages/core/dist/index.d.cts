@@ -305,8 +305,8 @@ interface BembeyazEventMap {
     'presence:change': PresenceChangeHandler;
 }
 
-/** World-units of trail kept while actively drawing (~3s at a moderate pace). */
-declare const LASER_MAX_LENGTH = 550;
+/** World-units of trail shown while a stroke is fading after pointer-up (not used while still drawing). */
+declare const LASER_MAX_LENGTH = 4000;
 /** How long (ms) the remaining trail fades out after the pointer is released. */
 declare const LASER_AFTER_FADE_MS = 900;
 interface LaserPoint {
@@ -359,7 +359,10 @@ declare class Bembeyaz {
      * `offsetWorld` shifts placement for stacking multiple imports in one action.
      * With `appendToSelection`, the new id is added to the current selection instead of replacing it.
      */
-    insertImageFromDataUrl(src: string, naturalWidth: number, naturalHeight: number, offsetWorld?: number, appendToSelection?: boolean): string | undefined;
+    insertImageFromDataUrl(src: string, naturalWidth: number, naturalHeight: number, offsetWorld?: number, appendToSelection?: boolean, atWorld?: {
+        x: number;
+        y: number;
+    } | null): string | undefined;
     setPenOptions(opts: Partial<PenOptions>): void;
     /** Current pen / placement defaults (drives the style panel when nothing is selected). */
     getPenOptions(): Readonly<PenOptions>;
@@ -374,6 +377,13 @@ declare class Bembeyaz {
     getGridStyle(): GridStyle;
     /** Download the static canvas (background, grid, elements) as a PNG file. */
     exportToPngDownload(filename?: string): void;
+    /** Copy the current static canvas (same pixels as PNG export) to the system clipboard. */
+    copyImageToClipboard(): Promise<void>;
+    /** Download the scene as a standalone SVG file (vector shapes; embedded images). */
+    exportToSvgDownload(filename?: string): void;
+    /** Serialize selected elements as JSON for clipboard (paste not implemented). */
+    copySelectedElementsToClipboard(): void;
+    cutSelectedElements(): void;
     setHandMode(enabled: boolean): void;
     isHandMode(): boolean;
     undo(): boolean;

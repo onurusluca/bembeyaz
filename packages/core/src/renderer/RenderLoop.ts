@@ -23,6 +23,8 @@ export interface RenderLoopOptions {
   getMarqueeRect: () => AABB | null
   /** Active laser pointer trails; null when laser tool is not in use. */
   getLaserSegments: () => readonly LaserSegment[] | null
+  /** Eraser drag trail; null when eraser tool is not in use. */
+  getEraserSegments: () => readonly LaserSegment[] | null
   /** Presence-backed cursors for remote users (same data as `getPresence` / Realtime). */
   getPresenceRender?: () => { localUserId: string; peers: readonly PresencePeer[] }
   /** Remote laser segments from `Bembeyaz.applyRemoteLaser`. */
@@ -104,6 +106,7 @@ export class RenderLoop {
     if (this.dirtyInteractive) {
       const active = o.getActiveTool()
       const laserSegs = o.getLaserSegments?.() ?? null
+      const eraserSegs = active === 'eraser' ? (o.getEraserSegments?.() ?? null) : null
       renderInteractiveOverlay({
         canvas: o.canvas,
         viewport: o.viewport,
@@ -117,6 +120,7 @@ export class RenderLoop {
             : o.getShapePreview(),
         marqueeRect: active === 'select' ? o.getMarqueeRect?.() ?? null : null,
         laserSegments: laserSegs,
+        eraserSegments: eraserSegs,
         laserNow: Date.now(),
         connectorPlacementPreview: o.getConnectorPlacementPreview?.() ?? null,
         remotePresence: o.getPresenceRender?.(),

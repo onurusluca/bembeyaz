@@ -1,7 +1,19 @@
 import type { ToolContext } from './ToolContext.js'
 
-/** World-units of trail kept while actively drawing (~3s at a moderate pace). */
-export const LASER_MAX_LENGTH = 550
+/** World-units of trail shown while a stroke is fading after pointer-up (not used while still drawing). */
+export const LASER_MAX_LENGTH = 4000
+
+/** Hard cap on stored points per segment (memory); renormalize arc-length when trimming. */
+export const MAX_LASER_POINTS = 12000
+
+/** Drop oldest samples when a live drag exceeds the cap; renormalize cumulative `d`. */
+export function capLaserPolylineLength(pts: LaserPoint[]): void {
+  if (pts.length <= MAX_LASER_POINTS) return
+  const drop = pts.length - MAX_LASER_POINTS
+  pts.splice(0, drop)
+  const d0 = pts[0]!.d
+  for (const p of pts) p.d -= d0
+}
 
 /** How long (ms) the remaining trail fades out after the pointer is released. */
 export const LASER_AFTER_FADE_MS = 900
@@ -93,16 +105,7 @@ export class LaserTool {
 
     for (const seg of this.segments) {
       if (seg.upAt !== null) continue
-      // Prune tail of active segments beyond the length window
-      const pts = seg.points
-      if (pts.length < 2) continue
-      const totalD = pts[pts.length - 1]!.d
-      const minKeepD = totalD - LASER_MAX_LENGTH
-      if (minKeepD > 0) {
-        const idx = pts.findIndex((p) => p.d >= minKeepD)
-        // Keep one extra point before the cutoff for a smooth fade start
-        if (idx > 1) pts.splice(0, idx - 1)
-      }
+      capLaserPolylineLength(seg.points)
     }
 
     // Remove completed segments that have fully faded
