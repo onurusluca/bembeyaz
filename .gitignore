@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# Keep built core bundle in git for jsDelivr (cdn.jsdelivr.net/gh/...)
+!packages/core/dist/
+!packages/core/dist/**
 *.log
 .DS_Store
 .env
