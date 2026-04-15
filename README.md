@@ -2,6 +2,10 @@
 
 **Bembeyaz** is a Canvas 2D whiteboard library with an optional full UI (toolbar, status bar, and engine integration). It ships with **no runtime dependencies** and works in any environment that can mount a DOM element (vanilla JavaScript, Vite, React, Vue, and similar).
 
+
+<img width="1579" height="965" alt="image" src="https://github.com/user-attachments/assets/65aca722-d9fb-40db-bf23-967e65d33277" />
+
+
 ## Installation
 
 ```bash
