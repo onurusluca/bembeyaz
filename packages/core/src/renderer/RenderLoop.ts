@@ -5,6 +5,7 @@ import type { AABB } from '../utils/math.js'
 import { renderInteractiveOverlay, renderStaticScene } from './ElementRenderer.js'
 import type { PenPreviewStyle } from './ElementRenderer.js'
 import type { LaserSegment } from '../tools/LaserTool.js'
+import type { PresencePeer } from '../collaboration/presence.js'
 
 export interface RenderLoopOptions {
   canvas: CanvasPair
@@ -22,6 +23,10 @@ export interface RenderLoopOptions {
   getMarqueeRect: () => AABB | null
   /** Active laser pointer trails; null when laser tool is not in use. */
   getLaserSegments: () => readonly LaserSegment[] | null
+  /** Presence-backed cursors for remote users (same data as `getPresence` / Realtime). */
+  getPresenceRender?: () => { localUserId: string; peers: readonly PresencePeer[] }
+  /** Remote laser segments from `Bembeyaz.applyRemoteLaser`. */
+  getRemoteLaserRender?: () => readonly { userId: string; color: string; segments: readonly LaserSegment[] }[]
   getConnectorPlacementPreview?: () => { sourceId: string; hover: import('../types.js').Point } | null
 }
 
@@ -114,6 +119,8 @@ export class RenderLoop {
         laserSegments: laserSegs,
         laserNow: Date.now(),
         connectorPlacementPreview: o.getConnectorPlacementPreview?.() ?? null,
+        remotePresence: o.getPresenceRender?.(),
+        remoteLaser: o.getRemoteLaserRender?.(),
       })
       this.dirtyInteractive = false
     }

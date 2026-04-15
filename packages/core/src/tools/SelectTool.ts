@@ -329,8 +329,10 @@ export class SelectTool {
     if (this.dragMode === 'resize') {
       const corner = this.resizeCorner
       if (!corner) return
-      c.scene.updateElement(this.dragElementId, (el) =>
-        this.applyResize(el, corner, worldX, worldY, this.resizeLineEndpoint),
+      c.scene.updateElement(
+        this.dragElementId,
+        (el) => this.applyResize(el, corner, worldX, worldY, this.resizeLineEndpoint),
+        { emitCollaboration: false },
       )
       c.emitSceneChange()
       c.requestStaticRender()
@@ -345,32 +347,44 @@ export class SelectTool {
         const dx = worldX - this.lastWorld.x
         const dy = worldY - this.lastWorld.y
         this.lastWorld = { x: worldX, y: worldY }
-        c.scene.updateElement(this.dragElementId, (e) => {
-          if (e.type !== 'arrow' || !isAttachedArrow(e)) return e
-          return {
-            ...e,
-            bendOffsetX: (e.bendOffsetX ?? 0) + dx,
-            bendOffsetY: (e.bendOffsetY ?? 0) + dy,
-          }
-        })
+        c.scene.updateElement(
+          this.dragElementId,
+          (e) => {
+            if (e.type !== 'arrow' || !isAttachedArrow(e)) return e
+            return {
+              ...e,
+              bendOffsetX: (e.bendOffsetX ?? 0) + dx,
+              bendOffsetY: (e.bendOffsetY ?? 0) + dy,
+            }
+          },
+          { emitCollaboration: false },
+        )
       } else if (h === 'start') {
         const src = c.scene.getById(el.sourceId!)
         if (!src) return
         const proj = projectManualAnchor(src, { x: worldX, y: worldY })
         if (!proj) return
-        c.scene.updateElement(this.dragElementId, (e) => {
-          if (e.type !== 'arrow' || !isAttachedArrow(e)) return e
-          return { ...e, sourceManual: true, sourceSide: proj.side, sourceT: proj.t }
-        })
+        c.scene.updateElement(
+          this.dragElementId,
+          (e) => {
+            if (e.type !== 'arrow' || !isAttachedArrow(e)) return e
+            return { ...e, sourceManual: true, sourceSide: proj.side, sourceT: proj.t }
+          },
+          { emitCollaboration: false },
+        )
       } else if (h === 'end') {
         const tgt = c.scene.getById(el.targetId!)
         if (!tgt) return
         const proj = projectManualAnchor(tgt, { x: worldX, y: worldY })
         if (!proj) return
-        c.scene.updateElement(this.dragElementId, (e) => {
-          if (e.type !== 'arrow' || !isAttachedArrow(e)) return e
-          return { ...e, targetManual: true, targetSide: proj.side, targetT: proj.t }
-        })
+        c.scene.updateElement(
+          this.dragElementId,
+          (e) => {
+            if (e.type !== 'arrow' || !isAttachedArrow(e)) return e
+            return { ...e, targetManual: true, targetSide: proj.side, targetT: proj.t }
+          },
+          { emitCollaboration: false },
+        )
       }
       this.lastWorld = { x: worldX, y: worldY }
       c.emitSceneChange()
@@ -390,7 +404,7 @@ export class SelectTool {
           const tgtMv = ids.includes(el.targetId!)
           if (srcMv || tgtMv) continue
         }
-        c.scene.updateElement(id, (e) => this.translateElement(e, dx, dy))
+        c.scene.updateElement(id, (e) => this.translateElement(e, dx, dy), { emitCollaboration: false })
       }
       c.emitSceneChange()
       c.requestStaticRender()
@@ -457,6 +471,7 @@ export class SelectTool {
       const after = c.scene.getById(elId)
       if (after && JSON.stringify(beforeSingle) !== JSON.stringify(after)) {
         c.notifyElementUpdated(beforeSingle, after)
+        c.scene.emitCollaborationUpdate(elId, beforeSingle.version)
       }
     }
 
@@ -464,6 +479,7 @@ export class SelectTool {
       const after = c.scene.getById(elId)
       if (after && JSON.stringify(beforeSingle) !== JSON.stringify(after)) {
         c.notifyElementUpdated(beforeSingle, after)
+        c.scene.emitCollaborationUpdate(elId, beforeSingle.version)
       }
     }
 
@@ -474,6 +490,7 @@ export class SelectTool {
         const after = c.scene.getById(id)
         if (before && after && JSON.stringify(before) !== JSON.stringify(after)) {
           pairs.push({ before, after: cloneElement(after) })
+          c.scene.emitCollaborationUpdate(id, before.version)
         }
       }
       if (pairs.length === 1) {
@@ -495,6 +512,13 @@ export class SelectTool {
 
   onPointerCancel(): void {
     const pid = this.dragPointerId
+    const c = this.ctx
+    const mode = this.dragMode
+    const elId = this.dragElementId
+    const beforeSingle = this.dragHistoryBefore
+    const translateIds = this.dragTranslateIds
+    const snapshots = this.translateSnapshots
+
     this.dragPointerId = null
     this.dragMode = null
     this.dragElementId = null
@@ -505,7 +529,7 @@ export class SelectTool {
     this.resizeLineEndpoint = null
     this.connectorHandle = null
     this.marqueeWorld = null
-    const c = this.ctx
+
     if (c && pid !== null) {
       try {
         c.canvas.interactiveCanvas.releasePointerCapture(pid)
@@ -513,6 +537,29 @@ export class SelectTool {
         /* ignore */
       }
     }
+
+    if (c && mode === 'resize' && beforeSingle && elId) {
+      const after = c.scene.getById(elId)
+      if (after && JSON.stringify(beforeSingle) !== JSON.stringify(after)) {
+        c.scene.emitCollaborationUpdate(elId, beforeSingle.version)
+      }
+    }
+    if (c && mode === 'connectorHandle' && beforeSingle && elId) {
+      const after = c.scene.getById(elId)
+      if (after && JSON.stringify(beforeSingle) !== JSON.stringify(after)) {
+        c.scene.emitCollaborationUpdate(elId, beforeSingle.version)
+      }
+    }
+    if (c && mode === 'translate' && snapshots && translateIds) {
+      for (const id of translateIds) {
+        const before = snapshots.get(id)
+        const after = c.scene.getById(id)
+        if (before && after && JSON.stringify(before) !== JSON.stringify(after)) {
+          c.scene.emitCollaborationUpdate(id, before.version)
+        }
+      }
+    }
+
     this.ctx?.requestInteractiveRender()
   }
 

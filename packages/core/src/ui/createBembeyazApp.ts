@@ -10,7 +10,7 @@ import { createStylePanel } from './stylePanel.js'
 
 export interface BembeyazAppOptions extends Omit<BembeyazOptions, 'container'> {
   container: HTMLElement
-  locale?: 'en' | 'tr'
+  locale?: 'en' | 'tr' | 'ja'
 }
 
 export interface BembeyazApp {

@@ -20,6 +20,7 @@ import {
   type SceneOperation,
 } from './collaboration/operations.js'
 import { PresenceStore, type PresencePeer } from './collaboration/presence.js'
+import { LASER_AFTER_FADE_MS, type LaserSegment } from './tools/LaserTool.js'
 import type {
   BembeyazEventMap,
   BembeyazEventName,
@@ -130,6 +131,16 @@ export class Bembeyaz {
   private pendingCollabOps: SceneOperation[] = []
   private collabFlushScheduled = false
   private readonly presence: PresenceStore
+  private readonly remoteLaserByUser = new Map<string, readonly LaserSegment[]>()
+  private remoteLaserRaf = 0
+
+  private readonly tickRemoteLaser = (): void => {
+    this.remoteLaserRaf = 0
+    this.pruneRemoteLaser()
+    if (!this.hasRenderableRemoteLaser()) return
+    this.renderLoop.requestInteractive()
+    this.remoteLaserRaf = requestAnimationFrame(this.tickRemoteLaser)
+  }
 
   constructor(options: BembeyazOptions) {
     this.container = options.container
@@ -210,6 +221,20 @@ export class Bembeyaz {
       getLaserSegments: () => {
         const segs = this.toolManager.laser.getSegments()
         return segs.length > 0 ? segs : null
+      },
+      getPresenceRender: () => ({
+        localUserId: this.presence.getLocalUserId(),
+        peers: [...this.presence.getSnapshot().values()],
+      }),
+      getRemoteLaserRender: () => {
+        const snap = this.presence.getSnapshot()
+        const out: { userId: string; color: string; segments: readonly LaserSegment[] }[] = []
+        for (const [userId, segments] of this.remoteLaserByUser) {
+          if (segments.length === 0) continue
+          const color = snap.get(userId)?.color ?? '#94a3b8'
+          out.push({ userId, color, segments })
+        }
+        return out
       },
       getConnectorPlacementPreview: () => this.toolManager.getArrowConnectPreview(),
     })
@@ -679,12 +704,67 @@ export class Bembeyaz {
   setLocalPresence(patch: Partial<Omit<PresencePeer, 'userId'>>): void {
     this.presence.patchLocal(patch)
     this.events.emit('presence:change', this.presence.getSnapshot())
+    this.renderLoop.requestInteractive()
   }
 
   /** Merge remote presence; pass `null` to remove a peer. */
   applyRemotePresence(userId: string, patch: Partial<PresencePeer> | null): void {
     this.presence.applyRemote(userId, patch)
     this.events.emit('presence:change', this.presence.getSnapshot())
+    this.renderLoop.requestInteractive()
+  }
+
+  /**
+   * Remote laser strokes (same shape as `getLocalLaserSegments()`); feed from your Realtime broadcast.
+   * Ignores the local `userId`.
+   */
+  applyRemoteLaser(userId: string, segments: readonly LaserSegment[] | null): void {
+    if (userId === this.presence.getLocalUserId()) return
+    if (!segments || segments.length === 0) {
+      this.remoteLaserByUser.delete(userId)
+    } else {
+      this.remoteLaserByUser.set(userId, segments)
+    }
+    this.renderLoop.requestInteractive()
+    if (this.hasRenderableRemoteLaser() && !this.remoteLaserRaf) {
+      this.remoteLaserRaf = requestAnimationFrame(this.tickRemoteLaser)
+    }
+  }
+
+  /** Local laser segments (for broadcasting to peers). */
+  getLocalLaserSegments(): readonly LaserSegment[] {
+    return this.toolManager.laser.getSegments()
+  }
+
+  /**
+   * Map global pointer coordinates (`PointerEvent.clientX` / `clientY`) to world space.
+   * Matches the same transform as pen/laser input: rect is the **interactive canvas**, and
+   * viewport offsets are in **CSS pixels** (not device pixels — do not multiply by `devicePixelRatio`).
+   */
+  clientPointToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.canvas.interactiveCanvas.getBoundingClientRect()
+    const sx = clientX - rect.left
+    const sy = clientY - rect.top
+    return this.viewport.screenToWorld(sx, sy)
+  }
+
+  private pruneRemoteLaser(): void {
+    const now = Date.now()
+    for (const [uid, segments] of [...this.remoteLaserByUser.entries()]) {
+      const kept = segments.filter((seg) => seg.upAt === null || now - seg.upAt < LASER_AFTER_FADE_MS)
+      if (kept.length === 0) this.remoteLaserByUser.delete(uid)
+      else this.remoteLaserByUser.set(uid, kept)
+    }
+  }
+
+  private hasRenderableRemoteLaser(): boolean {
+    for (const segments of this.remoteLaserByUser.values()) {
+      for (const seg of segments) {
+        if (seg.upAt === null) return true
+        if (Date.now() - seg.upAt < LASER_AFTER_FADE_MS) return true
+      }
+    }
+    return false
   }
 
   getPresence(): ReadonlyMap<string, PresencePeer> {
@@ -851,6 +931,10 @@ export class Bembeyaz {
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
+    if (this.remoteLaserRaf) {
+      cancelAnimationFrame(this.remoteLaserRaf)
+      this.remoteLaserRaf = 0
+    }
     this.textEdit.dispose()
     this.canvas.interactiveCanvas.removeEventListener('pointerleave', this.onCanvasPointerLeave)
     this.input.detach()

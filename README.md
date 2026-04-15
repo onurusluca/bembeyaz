@@ -18,10 +18,11 @@ import { createBembeyaz } from '@bembeyaz/core'
 createBembeyaz({
   container: document.getElementById('app')!,
   backgroundColor: '#ffffff',
-  gridEnabled: false,
   locale: 'en',
 })
 ```
+
+By default the board shows a **line grid** (`gridEnabled` true, `gridStyle` `'lines'`). Set `gridEnabled: false` or `gridStyle: 'dots'` on `createBembeyaz` / `Bembeyaz` options to change that.
 
 For a headless setup with your own UI, use `BembeyazEngine` from the same package.
 
@@ -31,7 +32,7 @@ The engine exposes **operation-based** scene changes so you can sync with an ext
 
 - **`onChange`** — Receives batched `SceneOperation[]` after local edits (insert / update / delete with full element snapshots and optional `baseVersion` for optimistic concurrency). Updates are flushed once per microtask so rapid gestures coalesce into one array.
 - **`applyOperations(ops, options?)`** — Apply remote or server-delivered ops. Does **not** call `onChange` again (avoids echo). Use `conflictStrategy` (`'base-version'` or `'last-write-wins'`) and `duplicateInsert` (`'skip'` | `'replace'`) when needed.
-- **Presence** — `setLocalPresence`, `applyRemotePresence`, `getPresence`, `getLocalUserId`, and the **`presence:change`** event for cursors and user colors. Pair with Supabase Presence or Broadcast payloads.
+- **Presence** — `setLocalPresence`, `applyRemotePresence`, `getPresence`, `getLocalUserId`, and **`presence:change`**. Remote peers’ **cursors and names** are drawn on the interactive canvas. For `cursorWorld`, use **`clientPointToWorld(clientX, clientY)`** (same math as the engine; viewport state is **CSS px**, not × `devicePixelRatio`). **Laser:** `getLocalLaserSegments()` out; **`applyRemoteLaser(userId, segments)`** in.
 
 Undo/redo, `fromJSON`, and remote `applyOperations` do not emit collaboration ops. Types and helpers live under `SceneOperation`, `applySceneOperations`, `PresencePeer`, etc. (see package exports).
 

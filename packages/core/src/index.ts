@@ -34,3 +34,5 @@ export type {
 export { applySceneOperations } from './collaboration/operations.js'
 export type { PresencePeer } from './collaboration/presence.js'
 export { PresenceStore } from './collaboration/presence.js'
+export type { LaserPoint, LaserSegment } from './tools/LaserTool.js'
+export { LASER_AFTER_FADE_MS, LASER_MAX_LENGTH } from './tools/LaserTool.js'

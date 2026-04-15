@@ -5,10 +5,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm --prefix packages/core run build",
+    "build": "bun run --cwd packages/core build",
     "dev": "vite packages/core --host --open /demo/dev.html",
-    "dev:core": "npm --prefix packages/core run dev",
-    "demo": "npm --prefix packages/core run build && npx --yes serve packages/core -p 4173"
+    "dev:core": "bun run --cwd packages/core dev",
+    "demo": "bun run --cwd packages/core build && bunx serve packages/core -p 4173"
   },
   "devDependencies": {
     "vite": "^8.0.3"

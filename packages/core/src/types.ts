@@ -214,8 +214,9 @@ export interface BembeyazOptions {
   textOverlayParent?: HTMLElement
   /** CSS color */
   backgroundColor?: string
+  /** When true (default), draws the background grid using {@link gridStyle}. */
   gridEnabled?: boolean
-  /** Default `lines`. Ignored when the grid is hidden. */
+  /** `lines` (default) or `dots`. Ignored when the grid is hidden. */
   gridStyle?: GridStyle
   /** Max undo steps; set to 0 to disable undo/redo. Default 100. */
   historyDepth?: number

@@ -22,6 +22,7 @@ import type {
   StrokeDash,
   TextElement,
 } from '../types.js'
+import type { PresencePeer } from '../collaboration/presence.js'
 import type { LaserPoint, LaserSegment } from '../tools/LaserTool.js'
 import { LASER_MAX_LENGTH, LASER_AFTER_FADE_MS } from '../tools/LaserTool.js'
 
@@ -427,13 +428,15 @@ export function renderLaserTrails(
   segments: readonly LaserSegment[],
   now: number,
   zoom: number,
+  /** Defaults to the local laser red; use peer color for remote lasers. */
+  color: string = LASER_COLOR,
 ): void {
   if (segments.length === 0) return
 
   ctx.save()
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
-  ctx.strokeStyle = LASER_COLOR
+  ctx.strokeStyle = color
   noDash(ctx)
 
   const NUM_GROUPS = 12
@@ -507,13 +510,49 @@ export function renderLaserTrails(
     ctx.arc(head.x, head.y, 1.8 / zoom, 0, Math.PI * 2)
     ctx.fill()
     ctx.globalAlpha = segAlpha * 0.48
-    ctx.fillStyle = LASER_COLOR
+    ctx.fillStyle = color
     ctx.beginPath()
     ctx.arc(head.x, head.y, 4.5 / zoom, 0, Math.PI * 2)
     ctx.fill()
   }
 
   ctx.restore()
+}
+
+/** Remote peers' cursors (world space); drawn on top of the interactive layer. */
+export function renderRemotePresenceCursors(
+  ctx: CanvasRenderingContext2D,
+  zoom: number,
+  localUserId: string,
+  peers: readonly PresencePeer[],
+): void {
+  for (const p of peers) {
+    if (p.userId === localUserId) continue
+    const c = p.cursorWorld
+    if (!c) continue
+    const color = p.color ?? '#64748b'
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.lineWidth = 1.5 / zoom
+    ctx.globalAlpha = 0.95
+    ctx.beginPath()
+    ctx.arc(c.x, c.y, 6 / zoom, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.globalAlpha = 0.22
+    ctx.beginPath()
+    ctx.arc(c.x, c.y, 14 / zoom, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+    if (p.name) {
+      ctx.save()
+      ctx.font = `${12 / zoom}px system-ui, sans-serif`
+      ctx.fillStyle = color
+      ctx.globalAlpha = 0.92
+      ctx.fillText(p.name, c.x + 10 / zoom, c.y - 8 / zoom)
+      ctx.restore()
+    }
+  }
 }
 
 export interface InteractiveOverlayOptions {
@@ -533,6 +572,10 @@ export interface InteractiveOverlayOptions {
   laserSegments: readonly LaserSegment[] | null
   /** Current timestamp for laser fade calculation (`Date.now()`). */
   laserNow: number
+  /** Other users' cursors (from presence sync). */
+  remotePresence?: { localUserId: string; peers: readonly PresencePeer[] }
+  /** Other users' laser trails; set via `Bembeyaz.applyRemoteLaser`. */
+  remoteLaser?: readonly { userId: string; color: string; segments: readonly LaserSegment[] }[]
 }
 
 export function renderInteractiveOverlay(opts: InteractiveOverlayOptions): void {
@@ -566,8 +609,20 @@ export function renderInteractiveOverlay(opts: InteractiveOverlayOptions): void 
       opts.viewport.zoom,
     )
   }
+  const rl = opts.remoteLaser
+  if (rl && rl.length > 0) {
+    for (const { segments, color } of rl) {
+      if (segments.length > 0) {
+        renderLaserTrails(interactiveCtx, segments, opts.laserNow, opts.viewport.zoom, color)
+      }
+    }
+  }
   if (opts.laserSegments && opts.laserSegments.length > 0) {
     renderLaserTrails(interactiveCtx, opts.laserSegments, opts.laserNow, opts.viewport.zoom)
+  }
+  const rp = opts.remotePresence
+  if (rp && rp.peers.length > 0) {
+    renderRemotePresenceCursors(interactiveCtx, opts.viewport.zoom, rp.localUserId, rp.peers)
   }
 }
 

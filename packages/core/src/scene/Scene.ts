@@ -82,7 +82,15 @@ export class Scene {
     return true
   }
 
-  updateElement(id: string, updater: (el: Element) => Element): boolean {
+  /**
+   * @param options.emitCollaboration — Set `false` while coalescing many moves (e.g. pointer drag);
+   * call {@link emitCollaborationUpdate} once when the gesture ends so wire payloads stay small for heavy elements (images).
+   */
+  updateElement(
+    id: string,
+    updater: (el: Element) => Element,
+    options?: { emitCollaboration?: boolean },
+  ): boolean {
     const i = this.elements.findIndex((e) => e.id === id)
     if (i < 0) return false
     const before = this.elements[i]!
@@ -92,10 +100,25 @@ export class Scene {
     this.elements[i] = next
     this.rebuildIndex()
     this.dirty = true
+    if (options?.emitCollaboration !== false) {
+      this.emitCollaboration({
+        type: 'update',
+        id,
+        element: cloneElement(next),
+        baseVersion,
+      })
+    }
+    return true
+  }
+
+  /** One `update` op for the current element (after silent `updateElement` during a drag). */
+  emitCollaborationUpdate(id: string, baseVersion: number): boolean {
+    const el = this.getById(id)
+    if (!el) return false
     this.emitCollaboration({
       type: 'update',
       id,
-      element: cloneElement(next),
+      element: cloneElement(el),
       baseVersion,
     })
     return true

@@ -22,6 +22,10 @@ export function createCanvasManager(container: HTMLElement, onResize?: () => voi
   staticCanvas.style.top = '0'
   staticCanvas.style.zIndex = '0'
   staticCanvas.style.pointerEvents = 'none'
+  // Host resets often set `canvas { background: ... }`. The element background sits under the
+  // bitmap; the top (interactive) canvas must stay transparent so cleared pixels reveal the
+  // static layer (grid + scene), not a painted CSS color.
+  staticCanvas.style.backgroundColor = 'transparent'
 
   const interactiveCanvas = document.createElement('canvas')
   interactiveCanvas.style.position = 'absolute'
@@ -29,6 +33,7 @@ export function createCanvasManager(container: HTMLElement, onResize?: () => voi
   interactiveCanvas.style.top = '0'
   interactiveCanvas.style.zIndex = '1'
   interactiveCanvas.style.pointerEvents = 'auto'
+  interactiveCanvas.style.backgroundColor = 'transparent'
 
   container.appendChild(staticCanvas)
   container.appendChild(interactiveCanvas)

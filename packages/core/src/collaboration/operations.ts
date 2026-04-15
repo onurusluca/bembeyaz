@@ -4,7 +4,8 @@ import { cloneElement } from '../scene/elements.js'
 
 /**
  * Serializable scene mutation for syncing to a backend (e.g. Supabase) or applying remote peers' edits.
- * Always carry full element snapshots on insert/update so the wire format is self-contained.
+ * Insert and normal updates carry full element snapshots so the wire format is self-contained.
+ * Local translate/resize drags coalesce to a single update per element on pointer up (see `Scene.updateElement`).
  */
 export type SceneOperation =
   | { type: 'insert'; element: Element; /** Paint order; omit to append. */ index?: number }
